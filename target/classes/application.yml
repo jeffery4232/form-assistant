@@ -1,0 +1,18 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: form-demo
+
+# OpenAI配置已移除，使用本地意图识别服务
+
+logging:
+  level:
+    com.formdemo: DEBUG
+    root: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+

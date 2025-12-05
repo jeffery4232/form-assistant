@@ -1,218 +1,214 @@
 package com.formdemo.service;
 
-import com.formdemo.model.Intent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.formdemo.exception.OpenAIException;
+import com.formdemo.model.*;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Map;
 
 @Service
 public class LocalIntentService {
 
-    private static final Logger log = LoggerFactory.getLogger(LocalIntentService.class);
-
-    private static final List<String> HOTEL_KEYWORDS = Arrays.asList(
-            "酒店", "住宿", "宾馆", "旅馆", "住", "房间", "订房", "预订酒店"
-    );
-
-    private static final List<String> FLIGHT_KEYWORDS = Arrays.asList(
-            "飞机", "航班", "机票", "航空", "飞行", "飞", "买机票", "订机票"
-    );
-
-    private static final List<String> TRAIN_KEYWORDS = Arrays.asList(
-            "火车", "高铁", "动车", "列车", "铁路", "火车票", "订火车票"
-    );
-
-    private static final List<String> TRAVEL_KEYWORDS = Arrays.asList(
-            "去", "到", "前往", "旅行", "出行", "旅游"
-    );
-
+    private final OpenAIService openAIService;
+    private final ObjectMapper objectMapper;
+    
     /**
-     * 使用本地规则进行意图识别和对话
+     * 字段类型映射表：将中英文类型名称映射到标准HTML表单字段类型
      */
-    public String chatWithAI(String userMessage, List<String> conversationHistory) {
-        if (userMessage == null || userMessage.trim().isEmpty()) {
-            return "您好，请问我可以为您做些什么？";
-        }
+    private static final Map<String, String> FIELD_TYPE_MAP = new HashMap<>();
+    
+    static {
+        FIELD_TYPE_MAP.put("日期", "date");
+        FIELD_TYPE_MAP.put("date", "date");
+        FIELD_TYPE_MAP.put("时间", "datetime-local");
+        FIELD_TYPE_MAP.put("datetime", "datetime-local");
+        FIELD_TYPE_MAP.put("姓名", "text");
+        FIELD_TYPE_MAP.put("name", "text");
+        FIELD_TYPE_MAP.put("名字", "text");
+        FIELD_TYPE_MAP.put("生日", "date");
+        FIELD_TYPE_MAP.put("birthday", "birthday");
+        FIELD_TYPE_MAP.put("性别", "select");
+        FIELD_TYPE_MAP.put("gender", "select");
+        FIELD_TYPE_MAP.put("sex", "select");
+        FIELD_TYPE_MAP.put("邮箱", "email");
+        FIELD_TYPE_MAP.put("email", "email");
+        FIELD_TYPE_MAP.put("电话", "tel");
+        FIELD_TYPE_MAP.put("phone", "tel");
+        FIELD_TYPE_MAP.put("数字", "number");
+        FIELD_TYPE_MAP.put("number", "number");
+        FIELD_TYPE_MAP.put("文本", "text");
+        FIELD_TYPE_MAP.put("text", "text");
+        FIELD_TYPE_MAP.put("多行文本", "textarea");
+        FIELD_TYPE_MAP.put("textarea", "textarea");
+        FIELD_TYPE_MAP.put("密码", "password");
+        FIELD_TYPE_MAP.put("password", "password");
+        FIELD_TYPE_MAP.put("选择", "select");
+        FIELD_TYPE_MAP.put("select", "select");
+        FIELD_TYPE_MAP.put("复选框", "checkbox");
+        FIELD_TYPE_MAP.put("checkbox", "checkbox");
+        FIELD_TYPE_MAP.put("单选", "radio");
+        FIELD_TYPE_MAP.put("radio", "radio");
+    }
 
-        String input = userMessage.toLowerCase().trim();
-        
-        // 检查是否包含旅行相关关键词
-        boolean hasTravelIntent = TRAVEL_KEYWORDS.stream()
-                .anyMatch(input::contains);
-
-        // 检查酒店意图
-        boolean hasHotelIntent = HOTEL_KEYWORDS.stream()
-                .anyMatch(input::contains);
-        
-        // 检查机票意图
-        boolean hasFlightIntent = FLIGHT_KEYWORDS.stream()
-                .anyMatch(input::contains);
-        
-        // 检查火车票意图
-        boolean hasTrainIntent = TRAIN_KEYWORDS.stream()
-                .anyMatch(input::contains);
-
-        // 如果同时有多个意图或没有明确意图
-        int intentCount = 0;
-        if (hasHotelIntent) intentCount++;
-        if (hasFlightIntent) intentCount++;
-        if (hasTrainIntent) intentCount++;
-
-        // 检查历史对话中是否已经有明确的意图
-        String previousIntent = extractPreviousIntent(conversationHistory);
-
-        if (intentCount == 0 && hasTravelIntent && previousIntent == null) {
-            // 有旅行意图但没有明确的服务类型
-            return "我注意到您有出行计划。为了更好地为您服务，请告诉我您需要预订酒店、购买机票，还是预订火车票呢？";
-        }
-
-        if (intentCount > 1) {
-            // 多个意图，需要澄清
-            return "我注意到您可能同时提到了多种出行方式。为了准确为您服务，请告诉我您主要需要预订哪一项：酒店、机票，还是火车票？";
-        }
-
-        // 明确识别到单一意图
-        if (hasHotelIntent && !hasFlightIntent && !hasTrainIntent) {
-            return "好的，我已经为您准备好了酒店预订表单，请填写以下信息：";
-        } else if (hasFlightIntent && !hasHotelIntent && !hasTrainIntent) {
-            return "好的，我已经为您准备好了机票预订表单，请填写以下信息：";
-        } else if (hasTrainIntent && !hasHotelIntent && !hasFlightIntent) {
-            return "好的，我已经为您准备好了火车票预订表单，请填写以下信息：";
-        }
-
-        // 如果之前有意图，继续使用（但需要确保用户消息中没有冲突的意图）
-        if (previousIntent != null && !previousIntent.isEmpty() && intentCount == 0) {
-            return "好的，我已经为您准备好了" + getIntentTypeName(previousIntent) + "预订表单，请填写以下信息：";
-        }
-
-        // 默认需要澄清
-        return "抱歉，我没有完全理解您的需求。请告诉我您需要预订酒店、购买机票，还是预订火车票？";
+    public LocalIntentService(OpenAIService openAIService) {
+        this.openAIService = openAIService;
+        this.objectMapper = new ObjectMapper();
     }
 
     /**
-     * 识别用户意图
+     * 使用LLM进行意图识别
+     * @param userMessage 用户消息
+     * @param currentFormFields 当前表单字段列表（可能为空）
+     * @return LLM意图识别响应
      */
-    public Intent recognizeIntent(String userMessage, List<String> conversationHistory) {
-        String aiResponse = chatWithAI(userMessage, conversationHistory);
-        
-        Intent intent = new Intent();
-        intent.setNeedsClarification(true);
-        intent.setClarificationQuestion(aiResponse);
-        
-        // 从用户消息中提取意图类型（必须从用户消息中明确识别，不能仅从AI回复中推断）
-        String lowerMessage = userMessage.toLowerCase();
-        
-        // 检查用户消息中是否明确包含意图关键词
-        boolean hasHotelKeyword = lowerMessage.contains("酒店") || lowerMessage.contains("住宿") || 
-                                  lowerMessage.contains("宾馆") || lowerMessage.contains("旅馆") ||
-                                  lowerMessage.contains("订房");
-        boolean hasFlightKeyword = lowerMessage.contains("机票") || lowerMessage.contains("飞机") || 
-                                  lowerMessage.contains("航班") || lowerMessage.contains("航空");
-        boolean hasTrainKeyword = lowerMessage.contains("火车") || lowerMessage.contains("高铁") || 
-                                 lowerMessage.contains("动车") || lowerMessage.contains("火车票");
-        
-        // 只有当用户消息中明确包含意图关键词时，才设置意图类型
-        if (hasHotelKeyword && !hasFlightKeyword && !hasTrainKeyword) {
-            intent.setType("HOTEL");
-            intent.setConfidence(0.9);
-            intent.setNeedsClarification(false);
-        } else if (hasFlightKeyword && !hasHotelKeyword && !hasTrainKeyword) {
-            intent.setType("FLIGHT");
-            intent.setConfidence(0.9);
-            intent.setNeedsClarification(false);
-        } else if (hasTrainKeyword && !hasHotelKeyword && !hasFlightKeyword) {
-            intent.setType("TRAIN");
-            intent.setConfidence(0.9);
-            intent.setNeedsClarification(false);
-        } else {
-            // 如果没有明确的单一意图，保持需要澄清状态
-            intent.setNeedsClarification(true);
-            intent.setType(null);
-        }
-        
-        // 提取姓名 - 支持多种模式
-        // 模式1: 我叫/我是/姓名/名字 + 姓名
-        Pattern namePattern1 = Pattern.compile("(?:我叫|我是|姓名|名字)[：:：]?\\s*([\\u4e00-\\u9fa5a-zA-Z]+)");
-        Matcher nameMatcher1 = namePattern1.matcher(userMessage);
-        if (nameMatcher1.find()) {
-            intent.setExtractedName(nameMatcher1.group(1));
-        } else {
-            // 模式2: 帮...定/订/买 + 服务类型（提取"帮"后面的姓名）
-            Pattern namePattern2 = Pattern.compile("帮([\\u4e00-\\u9fa5a-zA-Z]+)(?:定|订|买)");
-            Matcher nameMatcher2 = namePattern2.matcher(userMessage);
-            if (nameMatcher2.find()) {
-                intent.setExtractedName(nameMatcher2.group(1));
-            } else {
-                // 模式3: 为...定/订/买 + 服务类型（提取"为"后面的姓名）
-                Pattern namePattern3 = Pattern.compile("为([\\u4e00-\\u9fa5a-zA-Z]+)(?:定|订|买)");
-                Matcher nameMatcher3 = namePattern3.matcher(userMessage);
-                if (nameMatcher3.find()) {
-                    intent.setExtractedName(nameMatcher3.group(1));
-                } else {
-                    // 模式4: 给...定/订/买 + 服务类型（提取"给"后面的姓名）
-                    Pattern namePattern4 = Pattern.compile("给([\\u4e00-\\u9fa5a-zA-Z]+)(?:定|订|买)");
-                    Matcher nameMatcher4 = namePattern4.matcher(userMessage);
-                    if (nameMatcher4.find()) {
-                        intent.setExtractedName(nameMatcher4.group(1));
-                    }
-                }
+    public LLMIntentResponse recognizeIntentWithLLM(String userMessage, List<FormField> currentFormFields) {
+        try {
+            // 构建提示词
+            String context = buildFormContext(currentFormFields);
+            String prompt = buildIntentPrompt(context, userMessage);
+
+            // 构建消息列表
+            List<OpenAIRequest.Message> messages = new ArrayList<>();
+            messages.add(new OpenAIRequest.Message("system", "你是一个表单构建与填写助手。只有在用户明确表达业务意图（订酒店、定机票、请假、报销发票）时才创建表单。对于自我介绍、聊天等非业务意图，必须返回 chat 意图。"));
+            messages.add(new OpenAIRequest.Message("user", prompt));
+
+            // 调用OpenAI API
+            String responseContent = openAIService.callOpenAI(messages);
+            
+            // 清理响应内容，移除可能的markdown代码块标记
+            String jsonContent = cleanJsonResponse(responseContent);
+            
+            // 解析为LLMIntentResponse
+            LLMIntentResponse intentResponse = objectMapper.readValue(jsonContent, LLMIntentResponse.class);
+            
+            return intentResponse;
+            
+        } catch (OpenAIException e) {
+            // 如果是配额不足错误，抛出特殊异常以便上层处理
+            if (e.isQuotaExceeded()) {
+                throw e;
             }
+            // 其他 OpenAI 错误，返回默认的 chat 意图
+            LLMIntentResponse fallback = new LLMIntentResponse();
+            fallback.setIntent("chat");
+            fallback.setFormFields(new ArrayList<>());
+            fallback.setFieldUpdates(new java.util.HashMap<>());
+            return fallback;
+        } catch (Exception e) {
+            // 返回默认的chat意图
+            LLMIntentResponse fallback = new LLMIntentResponse();
+            fallback.setIntent("chat");
+            fallback.setFormFields(new ArrayList<>());
+            fallback.setFieldUpdates(new java.util.HashMap<>());
+            return fallback;
         }
-        
-        // 提取目的地
-        Pattern destPattern = Pattern.compile("(?:去|到|前往)[：:：]?\\s*([\\u4e00-\\u9fa5]+)");
-        Matcher destMatcher = destPattern.matcher(userMessage);
-        if (destMatcher.find()) {
-            intent.setExtractedDestination(destMatcher.group(1));
-        }
-        
-        // 提取日期
-        Pattern datePattern = Pattern.compile("(?:明天|后天|今天|\\d+月\\d+日|\\d{4}-\\d{2}-\\d{2})");
-        Matcher dateMatcher = datePattern.matcher(userMessage);
-        if (dateMatcher.find()) {
-            intent.setExtractedDate(dateMatcher.group(0));
-        }
-        
-        return intent;
     }
 
-    private String extractPreviousIntent(List<String> conversationHistory) {
-        if (conversationHistory == null || conversationHistory.isEmpty()) {
-            return null;
+    /**
+     * 构建表单上下文描述
+     */
+    private String buildFormContext(List<FormField> formFields) {
+        if (formFields == null || formFields.isEmpty()) {
+            return "[]";
         }
         
-        // 从历史对话中查找已明确的意图
-        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
-            String msg = conversationHistory.get(i).toLowerCase();
-            if (msg.contains("酒店")) {
-                return "HOTEL";
-            } else if (msg.contains("机票") || msg.contains("飞机")) {
-                return "FLIGHT";
-            } else if (msg.contains("火车") || msg.contains("高铁")) {
-                return "TRAIN";
+        try {
+            // 规范化字段类型
+            List<FormField> normalizedFields = new ArrayList<>();
+            for (FormField field : formFields) {
+                FormField normalizedField = new FormField(
+                    field.getName(),
+                    field.getLabel(),
+                    normalizeFieldType(field.getType()),
+                    field.getDefaultValue(),
+                    field.getOptions(),
+                    field.isRequired(),
+                    field.getPlaceholder()
+                );
+                normalizedFields.add(normalizedField);
             }
+            
+            // 使用ObjectMapper将表单字段转换为JSON格式用于上下文
+            return objectMapper.writeValueAsString(normalizedFields);
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+    
+    /**
+     * 规范化字段类型：根据映射表将类型名称转换为标准HTML表单字段类型
+     * @param type 原始类型名称
+     * @return 标准化后的类型名称
+     */
+    private String normalizeFieldType(String type) {
+        if (type == null || type.trim().isEmpty()) {
+            return "text"; // 默认类型
         }
         
-        return null;
+        String normalizedType = type.trim();
+        
+        // 先尝试直接匹配（不区分大小写）
+        String mappedType = FIELD_TYPE_MAP.get(normalizedType);
+        if (mappedType != null) {
+            return mappedType;
+        }
+        
+        // 尝试小写匹配
+        mappedType = FIELD_TYPE_MAP.get(normalizedType.toLowerCase());
+        if (mappedType != null) {
+            return mappedType;
+        }
+        
+        // 如果映射表中没有，返回原始类型（可能是已标准化的类型）
+        return normalizedType;
     }
 
-    private String getIntentTypeName(String intentType) {
-        switch (intentType) {
-            case "HOTEL":
-                return "酒店";
-            case "FLIGHT":
-                return "机票";
-            case "TRAIN":
-                return "火车票";
-            default:
-                return "预订";
-        }
+    /**
+     * 构建意图识别的提示词
+     */
+    private String buildIntentPrompt(String context, String userMessage) {
+        return "现有表单定义（可能为空）：\n\n" + context + "\n\n" +
+               "用户的自然语言输入：\n\n" + userMessage + "\n\n" +
+               "请返回JSON，必须包含：\n\n" +
+               "- intent: \"create_form\" | \"fill_form\" | \"chat\"\n\n" +
+               "- form_fields: 当需要创建或更新表单结构时的字段数组（格式同前），否则返回 []\n\n" +
+               "- field_updates: 当 intent 为 fill_form 时，需要填写/修改的字段键值对，键请使用字段的 name（若只提供 label，请结合上下文推断 name）。无变更则为空对象。\n\n" +
+               "重要规则：\n\n" +
+               "1. 只有在用户明确表达以下业务意图时，才将 intent 设为 create_form：\n" +
+               "   - 订酒店/预订酒店/酒店预订\n" +
+               "   - 定机票/预订机票/机票预订\n" +
+               "   - 请假/申请请假/请假申请\n" +
+               "   - 报销发票/发票报销/报销申请\n\n" +
+               "2. 以下情况必须将 intent 设为 chat（不创建表单）：\n" +
+               "   - 自我介绍（如：\"我叫xxx\"、\"我是xxx\"）\n" +
+               "   - 普通聊天、问候、闲聊\n" +
+               "   - 询问时间、天气等非业务相关问题\n" +
+               "   - 没有明确业务意图的对话\n\n" +
+               "3. 如果用户仅提供要填写的内容（如\"把姓名填成张三\"），intent 设为 fill_form，将相应字段写入 field_updates。\n\n" +
+               "4. 如果用户输入只是个人信息介绍或聊天，没有明确的业务意图，intent 必须设为 chat，form_fields 返回空数组 []。\n\n" +
+               "5. 只返回 JSON，不要额外文字。";
     }
+
+    /**
+     * 清理JSON响应，移除可能的markdown代码块标记
+     */
+    private String cleanJsonResponse(String response) {
+        String cleaned = response.trim();
+        // 移除可能的markdown代码块标记
+        if (cleaned.startsWith("```json")) {
+            cleaned = cleaned.substring(7);
+        } else if (cleaned.startsWith("```")) {
+            cleaned = cleaned.substring(3);
+        }
+        if (cleaned.endsWith("```")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 3);
+        }
+        return cleaned.trim();
+    }
+
 }
 

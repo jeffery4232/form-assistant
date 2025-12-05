@@ -7,13 +7,64 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class FormGeneratorService {
 
     /**
-     * 根据意图生成表单HTML
+     * 根据字段列表和表单数据生成表单HTML（用于LLM生成的表单）
+     */
+    public String generateFormHtmlFromFields(List<FormField> fields, Map<String, Object> formData) {
+        if (fields == null || fields.isEmpty()) {
+            return "";
+        }
+        
+        String formId = UUID.randomUUID().toString();
+        
+        // 合并表单数据到字段默认值
+        List<FormField> fieldsWithData = new ArrayList<>();
+        for (FormField field : fields) {
+            FormField fieldCopy = new FormField(
+                field.getName(),
+                field.getLabel(),
+                field.getType(),
+                field.getDefaultValue(),
+                field.getOptions(),
+                field.isRequired(),
+                field.getPlaceholder()
+            );
+            
+            // 如果表单数据中有该字段的值，使用表单数据中的值
+            if (formData != null && formData.containsKey(field.getName())) {
+                Object value = formData.get(field.getName());
+                fieldCopy.setDefaultValue(value != null ? value.toString() : "");
+            }
+            
+            fieldsWithData.add(fieldCopy);
+        }
+        
+        StringBuilder html = new StringBuilder();
+        html.append("<div class=\"form-container\" data-form-id=\"").append(formId).append("\">");
+        html.append("<form id=\"form-").append(formId).append("\" class=\"dynamic-form\">");
+        
+        for (FormField field : fieldsWithData) {
+            html.append(generateFieldHtml(field));
+        }
+        
+        html.append("<div class=\"form-actions\">");
+        html.append("<button type=\"submit\" class=\"btn-submit\">提交</button>");
+        html.append("<button type=\"button\" class=\"btn-reset\" onclick=\"this.form.reset()\">重置</button>");
+        html.append("</div>");
+        html.append("</form>");
+        html.append("</div>");
+        
+        return html.toString();
+    }
+
+    /**
+     * 根据意图生成表单HTML（保留用于向后兼容）
      */
     public String generateFormHtml(String intentType, Intent intent, UserInfo userInfo) {
         String formId = UUID.randomUUID().toString();

@@ -7,8 +7,6 @@ spring:
   application:
     name: form-demo
 
-# OpenAI配置已移除，使用本地意图识别服务
-
 logging:
   level:
     com.formdemo: DEBUG

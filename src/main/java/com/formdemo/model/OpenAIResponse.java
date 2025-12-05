@@ -1,7 +1,9 @@
 package com.formdemo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class OpenAIResponse {
     private String id;
     private String object;
@@ -60,6 +62,7 @@ public class OpenAIResponse {
         this.choices = choices;
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Choice {
         private int index;
         private Message message;
@@ -99,6 +102,7 @@ public class OpenAIResponse {
         }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Message {
         private String role;
         private String content;

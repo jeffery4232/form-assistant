@@ -9,4 +9,3 @@ public class FormAssistantApplication {
         SpringApplication.run(FormAssistantApplication.class, args);
     }
 }
-

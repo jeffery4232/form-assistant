@@ -1,5 +1,6 @@
 com/formdemo/model/ChatMessage.class
 com/formdemo/controller/ChatController.class
+com/formdemo/exception/OpenAIException.class
 com/formdemo/model/UserInfo.class
 com/formdemo/model/OpenAIRequest$Message.class
 com/formdemo/model/OpenAIResponse.class
@@ -8,10 +9,12 @@ com/formdemo/model/OpenAIResponse$Message.class
 com/formdemo/model/Intent.class
 com/formdemo/service/ChatService.class
 com/formdemo/model/FormField.class
+com/formdemo/service/OpenAIService.class
 com/formdemo/service/FormGeneratorService.class
 com/formdemo/model/OpenAIResponse$Choice.class
-com/formdemo/FormDemoApplication.class
 com/formdemo/service/UserInfoService.class
 com/formdemo/model/ChatResponse.class
 com/formdemo/service/LocalIntentService.class
+com/formdemo/FormAssistantApplication.class
 com/formdemo/model/OpenAIRequest.class
+com/formdemo/model/LLMIntentResponse.class

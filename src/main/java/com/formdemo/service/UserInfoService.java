@@ -29,8 +29,15 @@ public class UserInfoService {
             userInfo.setIdCard("110101199001011234");
             userInfo.setPreferredTransportation(Arrays.asList("飞机", "高铁", "自驾", "大巴"));
             userInfo.setDefaultCity("北京");
+        } else {
+            // 默认用户信息
+            userInfo.setName("张三");
+            userInfo.setPhone("138****8888");
+            userInfo.setEmail("user@example.com");
+            userInfo.setIdCard("110101199001011234");
+            userInfo.setPreferredTransportation(Arrays.asList("飞机", "高铁", "自驾", "大巴"));
+            userInfo.setDefaultCity("北京");
         }
-
 
         return userInfo;
     }
